@@ -1,0 +1,59 @@
+sudo: required
+dist: trusty
+language: ruby
+
+before_install:
+- gem install asciidoctor -v 1.5.2 
+- gem install tilt
+- sudo pip install git+https://github.com/rdhyee/ebooklib.git
+script:
+- VERSION=`ruby -e "require 'yaml'; meta = YAML.load_file('metadata.yaml'); puts meta['_version'];"`
+- git clone https://github.com/gitenberg-dev/asciidoctor-htmlbook.git
+
+- sudo pip install -r asciidoctor-htmlbook/gitberg-machine/requirements.txt
+- asciidoctor -a toc,idprefix=xx_,version=$VERSION -b xhtml5 -T ./asciidoctor-htmlbook/htmlbook-autogen/
+  -d book book.asciidoc -o book.html
+- git clone https://github.com/gitenberg-dev/HTMLBook
+
+# make book.html available to jinja2 environment by putting it into templates
+- cp book.html asciidoctor-htmlbook/gitberg-machine/templates/
+
+- /usr/bin/python asciidoctor-htmlbook/gitberg-machine/machine.py -o . -m metadata.yaml book.html
+- xsltproc -stringparam external.assets.list " " ./HTMLBook/htmlbook-xsl/epub.xsl book.html
+- cp ./HTMLBook/stylesheets/epub/epub.css OEBPS
+- if [ -e cover.jpg ]; then cp cover.jpg OEBPS/cover.jpg; fi
+# look for first images directory and one found, copy over to ./OEBPS
+- find . -name images -type d | head -n 1 | xargs -I {} mv {} ./OEBPS/
+- zip -rX book.epub mimetype
+- zip -rX book.epub OEBPS/ META-INF/
+- if test -d "OEBPS/images/"; then zip -rX book.epub OEBPS/images/ ;fi
+- mv book.epub The-House-of-the-Seven-Gables.epub
+- ebook-convert The-House-of-the-Seven-Gables.epub The-House-of-the-Seven-Gables.mobi
+- xvfb-run ebook-convert The-House-of-the-Seven-Gables.epub The-House-of-the-Seven-Gables.pdf
+branches:
+  only:
+  - master
+notifications:
+  webhooks:
+    urls:
+      - https://unglue.it/api/travisci/webhook
+    on_success: always
+    on_failure: never
+    on_start: never
+deploy:
+  skip_cleanup: true
+  provider: releases
+  api_key:
+    secure: Kh+xOh8SNNynjRIpxBuUE4ftNggNc22LuaV83qgwEgM/44yVkh7ZB+6X4biO+lgOTcFz0BZbcwLd+utE0h0ErCM+mJ1rnW+gFuGVUOScJTmcnMVj5J3J447c5H2Za1xWM/983B+gW+vUdSaxWsDoGEqwReFajGLj8uShrPUin1qhLMKmdJ0wl1gL0djJhNMHB+1aupo3B5boD+5kZ7XFX3t07d/zfJ+lAxLrfM+4t+U8VQXa5IzyTv7FSscNxqGw0ZhUcpgmHoWLmSWzQhGli5zx8FNQr/D5i0zZnC3QvApXF8dainFRQh+n/82foOM0kkEfn2sCsUD8BOtccUfpj5akItgVDpwB80m8exJZ9s9r1WRbxb+nGaOhGH3oQTrw+i7uIkXcr/TIVixOqwsuRQZFpWJgDdpmgd9HxwOJgLpDBolx35N2zUfd9JJ1g2xPqplPBClRrkKvnixl6RnqTesuPD+IPMCGcPAZDX2fG8drVVTnrv0jQPUzAaXwRtlnki6VtASYmypXoRZa2RbWJ/HlMltBIftwZ4Bzwou9M4x+ABYTlYFDOfdPVJLeZAeIFD/KZNNrnJ0oz1kdjOysoYhJdMI/uY2dg/lz6OD2iOdzlinEGrTwsnzE1PK6bFXsz7Hnu6oC9r8isVGR9B0Nf8PTsS4v6OAKufEQVhD1j+8=
+  file:
+    - The-House-of-the-Seven-Gables.epub
+    - The-House-of-the-Seven-Gables.mobi
+    - The-House-of-the-Seven-Gables.pdf
+  "on":
+    repo: GITenberg/The-House-of-the-Seven-Gables_77
+addons:
+  apt:
+    packages:
+    - xsltproc
+    - xvfb
+    - calibre
